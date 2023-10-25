@@ -14,7 +14,7 @@ library(units)
 # movebank_remove_credentials() #or:
 # keyring::default_backend()$keyring_delete()
 # # store credentials for new movebank account
-# movebank_store_credentials("Drylands", "4NJCpw5q8abzX3L", key_name = "Drylands")
+# movebank_store_credentials("Drylands", "*****", key_name = "Drylands")
 # # list accounts
 # keyring::key_list()
 
@@ -79,7 +79,7 @@ Ids_toDo <- as.numeric(all$id[! as.character(all$id) %in% IDs_done])
 # Ids_toDo <- c(Ids_toDo, studies_newSpec)
 
 usr <- "Drylands"
-psw <- "4NJCpw5q8abzX3L"
+psw <- "******"
 
 results <- lapply(Ids_toDo, function(studyId) try({ 
     #system(paste0('curl -v -u ', paste(usr, psw, sep=":"), ' -c ./cookies.txt -o ./licenseTerms/license_terms.txt "https://www.movebank.org/movebank/service/direct-read?entity_type=event&study_id=', studyId, '"'))
