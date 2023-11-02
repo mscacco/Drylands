@@ -128,7 +128,7 @@ names(results) <- seq_along(results)
 results[vapply(results, is.error, logical(1))]
 
 #####################################################################
-## selecting days with minimum nb of locations (=minLocationsMonth)  ##
+## selecting days with minimum nb of locations (=minLocationsMonth)  ## DONE ON CLUSTER
 #####################################################################
 dir.create(paste0(genPath,"8.vultureIndv_monthlydBBL"))
 pthmonthlydBBL <- paste0(genPath,"8.vultureIndv_monthlydBBL/")
@@ -181,7 +181,7 @@ results[vapply(results, is.error, logical(1))]
 
 
 ##############
-## monthly UD ##
+## monthly UD ## DONE ON CLUSTER
 ##############
 dir.create(paste0(genPath,"9.vultureIndv_monthlyUDL"))
 pthmonthlyUDL <- paste0(genPath,"9.vultureIndv_monthlyUDL/")
@@ -206,7 +206,7 @@ names(results) <- seq_along(results)
 results[vapply(results, is.error, logical(1))]
 
 ###################
-## monthly UD size ##
+## monthly UD size ## DONE ON CLUSTER
 ###################
 dir.create(paste0(genPath,"10.vultureIndv_monthlyUDtable"))
 monthlyUDtable <- paste0(genPath,"10.vultureIndv_monthlyUDtable/")
@@ -245,7 +245,7 @@ results <- lapply(flsMV5, function(indvFileRDS)try({
   centroids <- do.call("rbind",centroidsL)
   
   ########################################
-  ## monthly dBB weighted mean coordinates ##
+  ## monthly dBB weighted mean coordinates ## 
   ########################################
   dBBwCoordinatesL <- lapply(1:length(monthlydBBL), function(x){ 
     # print(x)
@@ -284,7 +284,7 @@ results <- lapply(flsMV5, function(indvFileRDS)try({
   saveRDS(monthlyUDcalc, file=paste0(monthlyUDtable,indvFileRDS))
 }))
 ###################################
-## monthly dBB coordinates as spdf ##
+## monthly dBB coordinates as spdf ## DONE ON CLUSTER
 ###################################
 
 dir.create(paste0(genPath,"11.vultureIndv_monthlyUDtable"))
