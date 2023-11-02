@@ -14,7 +14,7 @@ library("data.table")
 # So individuals which have multiple tags/deployments will have one line per tagID, associated to the start and end of the tracking time for that specific tag.
 # This is important for finding duplicated tagIDs within or across studies.
 
-# path_to_indv_move2 <- "/home/ascharf/Documents/Projects/ctmmRSF/2.storkIndv_mt_clean_empty_duply//1498452485_Anastasia (eobs 3560).rds"
+# path_to_indv_move2 <- "/home/ascharf/Documents/Projects/Drylands/EVC23/2.vultureIndv_mv2_clean_empty_duply//2034212088_G32753 - turquoise black 25 - 3633 - rehab.rds"
 
 referenceTableStudies <-  function(path_to_indv_move2){ 
   print(path_to_indv_move2) # this makes it easy to find which one gave an error
@@ -45,7 +45,8 @@ referenceTableStudies <-  function(path_to_indv_move2){
       MBid = tag_td$study_id,
       individual_local_identifier = as.character(tag_td$individual_local_identifier),
       tag_local_identifier = as.character(tag_td$tag_local_identifier),
-      species = as.character(tag_td$taxon_canonical_name),
+      # species = as.character(tag_td$taxon_canonical_name),
+      species = if(!is.null(tag_td$taxon_canonical_name)){tag_td$taxon_canonical_name}else{tag_td$taxon_ids},
       animal_life_stage = if(is.null(tag_td$animal_life_stage)){NA}else if(is.na(unique(tag_td$animal_life_stage))){NA}else{unique(as.character(tag_td$animal_life_stage))}, ## included not for filtering here, but including it as needed afterwards
       tracking_duration_days = round(as.numeric(difftime(range(mt_time(tag))[2],range(mt_time(tag))[1],units="days")),2),
       tracking_start_date = range(mt_time(tag))[1],  # Important to keep the full timestamp, as in the same day a tag can be removed from one individual and put on another one.
@@ -79,7 +80,7 @@ fls <- list.files(dataPath, pattern="rds", full.names = T)
 start_time<- Sys.time()
 referenceTableStudies_ALL <- as.data.frame(rbindlist(lapply(fls, referenceTableStudies)))
 end_time <- Sys.time() 
-end_time-start_time # ~
+end_time-start_time # ~20mins
 
 saveRDS(referenceTableStudies_ALL, file=paste0(genPath,"/referenceTableStudies_ALL_original.rds")) ## just to making sure to have a copy that is untouched, as after this it will be modified and overwritten....  
 
@@ -332,7 +333,7 @@ checkDF <- referenceTableStudies_ALL[complete.cases(referenceTableStudies_ALL$ke
 
 checkL <- split(checkDF,checkDF$kept_MB_Ind_Tag_Sps)
 table(unlist(lapply(checkL,nrow)))
-checkL[[250]]
+checkL[[25]]
 
 ## sometimes 2 or more indiv are kept 
 table(unlist(lapply(checkL,function(x){
@@ -343,24 +344,24 @@ table(unlist(lapply(checkL,function(x){
 for(i in 1:length(checkL)){
   grp <- checkL[[i]]
   # if(nrow(grp[grp$excluded=="no",])>1){ # it seems sometimes the wrong one got selected (i.e. shortest), not sure why.....
-    
-    if(keepCriterion=="locations"){
-      kp <- grp$rowID[grp$GPSpts_total==max(grp$GPSpts_total)]
-      if(length(kp)>1){kp <- kp[1]}
-      rids <- grp$rowID
-      rids <- rids[!rids==kp]
-      referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%kp] <- "no"
-      referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%rids] <- "yes_duplicated"
-    }  
-    
-    if(keepCriterion=="duration"){
-      kp <- grp$rowID[grp$tracking_duration_days==max(grp$tracking_duration_days)]
-      if(length(kp)>1){kp <- kp[1]}
-      rids <- grp$rowID
-      rids <- rids[!rids==kp]
-      referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%kp] <- "no"
-      referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%rids] <- "yes_duplicated"
-    }
+  
+  if(keepCriterion=="locations"){
+    kp <- grp$rowID[grp$GPSpts_total==max(grp$GPSpts_total)]
+    if(length(kp)>1){kp <- kp[1]}
+    rids <- grp$rowID
+    rids <- rids[!rids==kp]
+    referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%kp] <- "no"
+    referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%rids] <- "yes_duplicated"
+  }  
+  
+  if(keepCriterion=="duration"){
+    kp <- grp$rowID[grp$tracking_duration_days==max(grp$tracking_duration_days)]
+    if(length(kp)>1){kp <- kp[1]}
+    rids <- grp$rowID
+    rids <- rids[!rids==kp]
+    referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%kp] <- "no"
+    referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID%in%rids] <- "yes_duplicated"
+  }
   # }
 }
 # sanity check
@@ -378,8 +379,8 @@ saveRDS(referenceTableStudies_ALL, file=paste0(genPath,"/referenceTableStudies_A
 library(move2)
 library(ggplot2)
 
-genPath <- "/home/ascharf/Documents/Projects/ctmmRSF/"
-pthClean <- "2.storkIndv_mt_clean_empty_duply/"
+genPath <- "/home/ascharf/Documents/Projects/Drylands/EVC23/"
+pthClean <- "2.vultureIndv_mv2_clean_empty_duply/"
 dataPath <- paste0(genPath,pthClean)
 
 referenceTableStudies_ALL <- readRDS(file=paste0(genPath,"/referenceTableStudies_ALL_excludedColumn.rds"))

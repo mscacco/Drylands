@@ -2,6 +2,12 @@
 
 library(move2)
 library(units)
+
+
+library(doParallel)
+library(plyr)
+mycores <- detectCores()-1
+registerDoParallel(mycores)
 library(dplyr)
 
 genPath <- "/home/ascharf/Documents/Projects/Drylands/EVC23/"
@@ -12,15 +18,18 @@ pthClean <- "2.vultureIndv_mv2_clean_empty_duply/"
 savePath <- paste0(genPath,pthClean)
 
 
-flsMV <- list.files(filePath, full.names = T)
+flsMV <- list.files(filePath, full.names = F)
+done <- list.files(savePath, full.names = F)
+flsMV <- flsMV[!flsMV%in%done]
 
-# indPth <- paste0(genPath,"/1.storkIndv_mt/","21231406_Zozu + - DER AL581 (eobs2541).rds")
+# indPth <- flsMV[10]
 
 ## remove empty locs
 ## remove duplicated ts
 start_time <- Sys.time()
-results <- lapply(flsMV, function(indPth)try({
-  vultr <- readRDS(indPth)
+lapply(flsMV, function(indPth){
+  # llply(flsMV, function(indPth){
+  vultr <- readRDS(paste0(filePath,indPth))
   ## remove empty locs
   vultr <- vultr[!sf::st_is_empty(vultr),]
   ## sometimes only lat or long are NA
@@ -28,17 +37,19 @@ results <- lapply(flsMV, function(indPth)try({
   rem <- unique(c(which(is.na(crds[,1])),which(is.na(crds[,2]))))
   if(length(rem)>0){vultr <- vultr[-rem,]}
   ##retain the duplicate entry which contains the least number of columns with NA values
-  vultr <- vultr %>% rowwise() %>%
-    mutate(n_na = sum(is.na(cur_data()))) %>%
-     arrange(n_na) %>%
-     mt_filter_unique(criterion='first')
-
-  indiv <- unique(mt_track_data(vultr)$individual_local_identifier)
-  if(grepl("/", indiv)==T){indiv <- gsub("/","-",indiv)}
-  saveRDS(vultr, file=paste0(savePath,unique(mt_track_data(vultr)$study_id),"_",indiv,".rds"))
-}))
+  # vultr <- vultr %>% rowwise() %>%
+  #   mutate(n_na = sum(is.na(cur_data()))) %>%
+  #   arrange(n_na) %>%
+  #   mt_filter_unique(criterion='first')
+  vultr <- mt_filter_unique(vultr,criterion='first')
+  ## ensure timestamps are ordered within tracks
+  vultr <- dplyr::arrange(vultr, mt_track_id(vultr), mt_time(vultr))
+  
+  saveRDS(vultr, file=paste0(savePath,indPth))
+} )
+# } ,.parallel = T)
 end_time <- Sys.time()
-end_time - start_time # 1.14h
+end_time - start_time # ~
 
 is.error <- function(x) inherits(x, "try-error")
 table(vapply(results, is.error, logical(1)))
