@@ -21,7 +21,7 @@ library(units)
 # specify account to use in the R session
 options("move2_movebank_key_name" = "Drylands")
 # download list of studies available through this account
-all <- movebank_download_study_information(study_permission=c("data_manager","collaborator"))
+all <- movebank_download_study_info(study_permission=c("data_manager","collaborator"))
 # Remove potential studies not having deployed locations
 all <- all[all$number_of_deployed_locations > set_units(0, "count"),]
 
