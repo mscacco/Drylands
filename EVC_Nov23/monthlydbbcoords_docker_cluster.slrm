@@ -1,0 +1,28 @@
+#!/bin/bash -l
+# Standard output and error, one file per instance will be created:
+#SBATCH -o ./messages/job.out.%j
+#SBATCH -e ./messages/job.err.%j
+# Initial working directory:
+#SBATCH -D ./
+# Job Name:
+#SBATCH -J arraycoords
+# Queue (Partition):
+
+#SBATCH --nodes=1 # only one node can be used, if more are stated it gives an error
+#SBATCH --cpus-per-task=1  # for each instance (each time the R code is executed) one 1 core can be used
+#SBATCH --array=1-250 # this is the number of times your R code will be executed, in this case 60
+#SBATCH --mem=50000 # set the memory according to what you think you will need, do test, and check with  sacct (see above in how manage running jobs) which memory you actually need. It refers to the memory needed for each instance. Remember that if you assign the entire memory of a node (e.g. 240Gb) but are only using 1 core, this will block the entire node. If you need that much memory, it is fine, but if not you’ll be only using 1/20 (if the node has 20 cores) of the power. Try to optimize the memory you need, so you can use multiple cores per node. 
+#
+#SBATCH --mail-type=all
+#SBATCH --mail-user=ascharf@ab.mpg.de
+
+#
+# Wall clock limit:
+#SBATCH --time=01:00:00  # do not use 24h by default, try be state the time that you estimate that you actually need +20%. This time refers to the maximum time an instance will take 
+
+# Load compiler and MPI modules (must be the same as used for compiling the code)
+module purge
+module load apptainer/1.2.2
+
+# Run the program:
+srun apptainer exec geospatial_latest_updated.sif Rscript vulturescripts/monthlydbbcoords_docker_cluster.R $SLURM_ARRAY_TASK_ID
