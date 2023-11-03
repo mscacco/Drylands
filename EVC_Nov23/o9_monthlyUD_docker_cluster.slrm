@@ -25,4 +25,4 @@ module purge
 module load apptainer/1.2.2
 
 # Run the program:
-srun apptainer exec geospatial_latest_updated.sif Rscript vulturescripts/monthlydBB_docker_cluster.R $SLURM_ARRAY_TASK_ID
+srun apptainer exec geospatial_latest_updated.sif Rscript vulturescripts/o9_monthlyUD_docker_cluster.R $SLURM_ARRAY_TASK_ID

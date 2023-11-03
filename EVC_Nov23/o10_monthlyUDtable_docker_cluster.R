@@ -5,8 +5,8 @@ i <- as.numeric(args[1])
 #############
 library('move')
 library('move2')
-library('lubridate')
 library("rgeos") #gCentroid
+library('lubridate')
 library(data.table)
 
 
@@ -19,7 +19,6 @@ UDpercentage <- 0.99 ## UD used to calculate the area, centroid, coordinates ext
 ##################
 
 pathFolder <- "4.vultureIndv_mv2_1h_outlspeed/"
-flsMV <- list.files(pathFolder, full.names = F)
 pthmonthlydBBvar <- "6.vultureIndv_monthlydBBvar/"
 pthmonthlydBBL <- "8.vultureIndv_monthlydBBL/"
 pthmonthlyUDL <- "9.vultureIndv_monthlyUDL/"
