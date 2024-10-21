@@ -13,6 +13,8 @@ pthDownld <- paste0(genPath,"1.vultureIndv_mv2/")
 
 # # list accounts
 # keyring::key_list()
+ 
+movebank_store_credentials("Drylands")
 
 # specify account to use in the R session
 options("move2_movebank_key_name" = "Drylands")
