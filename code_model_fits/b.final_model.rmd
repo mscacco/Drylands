@@ -1,5 +1,5 @@
 ---
-title: "2.data_format"
+title: "b.final_model"
 author: "Dennis Kim"
 date: "`r Sys.Date()`"
 output: html_document
@@ -114,4 +114,5 @@ vulture_model <- bam(
 saveRDS(vulture_model, file = "vulture_model.rds")
 saveRDS(final_df, file = "Final_dryland_data.rds")
 ```
+
 
