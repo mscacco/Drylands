@@ -1,5 +1,5 @@
 ---
-title: "0.model_fit"
+title: "a.init_models"
 author: "Dennis Kim"
 date: "`r Sys.Date()`"
 output: html_document
@@ -138,4 +138,5 @@ model2 <- bam(
 # save the model 2
 saveRDS(model2, file = "model2.rds")
 ```
+
 
