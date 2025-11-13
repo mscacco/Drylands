@@ -1,0 +1,117 @@
+---
+title: "2.data_format"
+author: "Dennis Kim"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r libraries}
+# call libraries 
+library(here)
+library(MASS)
+library(nlme)
+library(mgcv)
+library(dplyr)
+library(tidyr)
+library(GGally)
+library(ggplot2)
+```
+
+# 0. Data call
+load the model fit data
+```{r model fit}
+# load data 
+final_df <- readRDS(here::here("data/0.final_data", "Final_July_2025.rds"))
+
+# factorize the cateogrical columns (animal_id, REALM, BIOME_NAME) 
+final_df$BIOME_NAME <- as.factor(final_df$BIOME_NAME)
+final_df$REALM <- as.factor(final_df$REALM)
+final_df$animal_id <- as.factor(final_df$animal_id)
+
+glimpse(final_df)
+```
+
+# 1. Model assumption checking 
+```{r data1}
+# data for model 1
+
+# remove species that has small samples (4 species removed - now 13 species)
+final_df1 <- final_df %>% dplyr::filter(! species %in% c("Cathartes burrovianus", "Gyps bengalensis", "Gyps rueppellii", "Sarcoramphus papa"))
+
+# scaling NDVI and lifestcok
+final_df1$wmLifestock_scale <- scale(final_df1$wmLifestock)
+
+# grouping variables: 
+## check the unique numbers per variables
+unique(final_df1$BIOME_NAME) # 16 levels 
+unique(final_df1$REALM) # 7 levels 
+unique(final_df1$species)# 13 levels 
+```
+
+data for model: remove all the NAs in REALM group
+```{r data2}
+final_df2 <- final_df1 %>% filter(!is.na(REALM) & REALM != "N/A") %>% droplevels()
+
+# final data
+final_df_clean <- na.omit(final_df2)
+summary(final_df_clean)
+
+# remove unnecessary dataset 
+rm(final_df, final_df1, final_df2)
+```
+
+mutate the new columns that calculate relative difference between current monthly UDs/NDVI to the next monthly UDs/NDVI
+```{r diff UDs}
+# separate the 'yearMonth' column to 'year' and 'month' columns 
+final_df_clean <- final_df_clean %>% separate(yearMonth, into = c("year", "month"), sep = "-", convert = TRUE)
+
+# futher filterization
+final_df3 <- final_df_clean %>% 
+  # select only valid columns for the dataframe
+  dplyr::select(species, animal_id, year, month, UDsizeKm2_99, wmNDVI, wmLifestock, wmLifestock_scale, REALM, UDwMeanLongitude, UDwMeanLatitude, REALM) %>% 
+  # mutate data column for rearranging the order of year and month for further filtering
+  mutate(date = as.Date(paste(year, month, "01", sep = "-"))) %>%
+  arrange(animal_id, date) %>% 
+  group_by(animal_id) %>% 
+  mutate(dsl_UD = UDsizeKm2_99 - lag(UDsizeKm2_99),
+         dsl_wmNDVI = wmNDVI - lag(wmNDVI)) %>% 
+  ungroup()
+
+# reorder the columns 
+final_df <- final_df3 %>% dplyr::select(species, animal_id, REALM, UDwMeanLongitude, UDwMeanLatitude, year, month, UDsizeKm2_99, dsl_UD, wmNDVI, dsl_wmNDVI, wmLifestock, wmLifestock_scale)
+
+rm(final_df3)
+
+glimpse(final_df)
+```
+
+# 2. Model fitting
+
+```{r species level}
+# 1. Finalized Model format
+vulture_model <- bam(
+  dsl_UD ~
+    # Allows different intercepts per species and REALM (fixed effect)
+    species + REALM+
+    
+    # Environmental Predictors with **Species-Specific** Smooths
+    s(dsl_wmNDVI, by = species, k = 5) +
+    s(wmLifestock, by = species, k = 5) +
+    
+    # spatial smooths (centroid coords), varying by species
+    s(UDwMeanLongitude, UDwMeanLatitude, by = species, k = 100) +
+    
+    # random intercept for animal_id (nested in species if IDs repeat across species)
+    s(animal_id, bs = "re"),
+  
+  data = final_df,
+  family = gaussian(),
+  method = "fREML",   # stable & efficient
+  discrete = TRUE     # good for large datasets
+)
+
+# save the final model and modified data frame 
+saveRDS(vulture_model, file = "vulture_model.rds")
+saveRDS(final_df, file = "Final_dryland_data.rds")
+```
+

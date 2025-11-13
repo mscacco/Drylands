@@ -1,0 +1,141 @@
+---
+title: "0.model_fit"
+author: "Dennis Kim"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r libraries}
+# call libraries 
+library(here)
+library(MASS)
+library(nlme)
+library(mgcv)
+library(dplyr)
+library(tidyr)
+library(GGally)
+library(ggplot2)
+```
+
+# 0. Data call
+load the model fit data
+```{r model fit}
+# load data 
+final_df <- readRDS(here::here("data/final_data", "Final_July_2025.rds"))
+
+# factorize the cateogrical columns (animal_id, REALM, BIOME_NAME) 
+final_df$BIOME_NAME <- as.factor(final_df$BIOME_NAME)
+final_df$REALM <- as.factor(final_df$REALM)
+final_df$animal_id <- as.factor(final_df$animal_id)
+
+glimpse(final_df)
+```
+
+# 1. Model assumption checking 
+```{r data1}
+# data for model 1
+
+# remove species that has small samples (4 species removed - now 13 species)
+final_df1 <- final_df %>% dplyr::filter(! species %in% c("Cathartes burrovianus", "Gyps bengalensis", "Gyps rueppellii", "Sarcoramphus papa"))
+
+# scaling NDVI and lifestcok
+final_df1$wmLifestock_scale <- scale(final_df1$wmLifestock)
+
+# grouping variables: 
+## check the unique numbers per variables
+unique(final_df1$BIOME_NAME) # 16 levels 
+unique(final_df1$REALM) # 7 levels 
+unique(final_df1$species)# 13 levels 
+```
+
+```{r colinearity}
+# colinearity effects: no colinearity effects! 
+corr_df <- final_df1 %>% dplyr::select(wmNDVI, wmLifestock, UDsizeKm2_99)
+
+## plot colinearity
+ggpairs(corr_df)
+
+## remove the coor data 
+rm(corr_df)
+```
+
+data for model 2: remove all the NAs in REALM group
+```{r data2}
+final_df2 <- final_df1 %>% filter(!is.na(REALM) & REALM != "N/A") %>% droplevels()
+
+summary(final_df2)
+
+# final data
+final_df_clean <- na.omit(final_df2)
+summary(final_df_clean)
+```
+
+# 2. Species levels
+BAM - generalized addictive models for very large datasets: 
+- Model UD size (km²) as a function of NDVI and Livestock
+- Allow species-specific slopes and intercepts for NDVI and Livestock
+- Account for spatial autocorrelation (from weighted centroids of UDs)
+- Control for individual-level random effects (animal ID nested in species)
+- Not focus on temporal trends, but monthly grouping is available
+- Eventually, visualize species-wise trends over NDVI and Livestock
+
+```{r species level}
+# 1. GAM with species level
+model1 <- bam(
+  log10(UDsizeKm2_99) ~
+    
+    # Species-specific smooths over NDVI and Livestock (different slopes + intercepts)
+    s(wmNDVI, by = species, k = 5) +
+    s(wmLifestock_scale, by = species, k = 5) +
+    
+    # Include species as a factor to allow different intercepts
+    species +
+    
+    # Spatial smooth (varying by species)
+    s(UDwMeanLongitude, UDwMeanLatitude, by = species, k = 100) +
+    
+    # Random effect for individual animals
+    s(animal_id, bs = "re"),
+    
+  data = final_df_clean,
+  family = gaussian(),
+  method = "fREML", # faster and stable for BAM
+  discrete = TRUE   # good for large datasets
+)
+
+# save the model 1
+saveRDS(model1, file = "model1.rds")
+```
+
+```{r}
+# 2. GAM with REALM 
+model2 <- bam(
+  log10(UDsizeKm2_99) ~
+    
+    # Environmental Predictors with **Species-Specific** Smooths
+    s(wmNDVI, by = species, k = 5) +
+    s(wmLifestock_scale, by = species, k = 5) +
+    
+    # Environmental Predictors with **REALM-Specific** Smooths
+    s(wmNDVI, by = REALM, k = 5)+
+    s(wmLifestock_scale, by = REALM, k =5)+
+    
+    # Allows different intercepts per species and REALM (fixed effect)
+    species + REALM +
+    
+    # Spatial smooth (varying by species)
+    s(UDwMeanLongitude, UDwMeanLatitude, by = species, k = 100) +
+    
+    # Random effect for individual animals
+    s(animal_id, bs = "re"),
+    
+  data = final_df_clean,
+  family = gaussian(),
+  method = "fREML", # faster and stable for BAM
+  discrete = TRUE   # good for large datasets
+)
+
+# save the model 2
+saveRDS(model2, file = "model2.rds")
+```
+
