@@ -168,7 +168,7 @@ okabe_ito <- c(
 )
 
 # NDVI
-ggplot() +
+fig1 <-ggplot() +
   geom_ribbon(
     data = smoothed_ndvi_ribbons,
     aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
@@ -186,6 +186,7 @@ ggplot() +
   scale_color_manual(values = okabe_ito) +
   scale_fill_manual(values = okabe_ito) +
 
+ # Theme and labels
   theme_minimal() +
   labs(
     x = "Change in NDVI (weighted mean)",
@@ -194,15 +195,24 @@ ggplot() +
     fill = "Realm"
   ) +
   theme(
-    legend.position = "none",
+    legend.position = "right",
     strip.text = element_text(size = 8)
   ) +
   
-  facet_wrap(REALM ~ species)
+   # Facet by REALM (rows) and species (columns), but hide REALM labels
+  facet_wrap(REALM ~ species, labeller = labeller(REALM = function(x) ""))
+
+ggsave(
+  filename = "figure_realm_NDVI_species_level.png",
+  plot = fig1,
+  width = 11,       # in inches (adjust as needed)
+  height = 5,      # in inches
+  dpi = 600
+)
 ```
 
 ```{r LS}
-ggplot() +
+fig2 <- ggplot() +
   # 95% Confidence Intervals
   geom_ribbon(
     data = smoothed_LS_ribbons, 
@@ -226,23 +236,25 @@ ggplot() +
   labs(
     x = "Lifestock (weighted mean)",
     y = expression("Change in UD Size (km²)"),
-    color = "Species",
-    fill = "Species"
+    color = "Realm",
+    fill = "Realm"
   ) +
   theme(
-    legend.position = "none",
+    legend.position = "right",
     strip.text = element_text(size = 8)
   ) +
   
-  # One facet per species
-  facet_wrap(REALM ~ species)
-```
+   # Facet by REALM (rows) and species (columns), but hide REALM labels
+  facet_wrap(REALM ~ species, labeller = labeller(REALM = function(x) ""))
 
-```{r figure zoom In combine}
-figure_together <- (fig1b/ fig2b)+ plot_layout(guides = "collect", axis_titles = "collect")
-figure_together
+ggsave(
+  filename = "figure_realm_Lifestock_species_level.png",
+  plot = fig2,
+  width = 11,       # in inches (adjust as needed)
+  height = 5,      # in inches
+  dpi = 600
+)
 ```
-
 
 # REALM grouping visualization
 ```{r REALM}
@@ -290,6 +302,7 @@ fig3a <- ggplot() +
   scale_fill_manual(values = okabe_ito) +
   theme_minimal() +
   labs(
+    title = "(a)",
     x = "Change in NDVI (weighted mean)",
     y = expression("Change in UD Size (km²)"),
     color = "Realm",
@@ -301,12 +314,52 @@ fig3a <- ggplot() +
   ) +
   facet_wrap(~REALM)
 
-fig3a
+fig3b <- ggplot() +
+  geom_ribbon(
+    data = smoothed_ndvi_realm_summary,
+    aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
+    alpha = 0.1, color = NA
+  ) +
+  geom_line(
+    data = smoothed_ndvi_realm_summary,
+    aes(x = dsl_wmNDVI, y = fit_smooth, color = REALM),
+    size = 1
+  ) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+  scale_color_manual(values = okabe_ito) +
+  scale_fill_manual(values = okabe_ito) +
+  theme_minimal() +
+  labs(
+    title = "(b)",
+    x = "Change in NDVI (weighted mean)",
+    y = "",
+    color = "Realm",
+    fill = "Realm"
+  ) +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(size = 8)
+  ) +
+  facet_wrap(~REALM, scale = "free")
+```
+
+```{r realm ndvi figures}
+figure_realm_NDVI <- (fig3a | fig3b)+ plot_layout(guides = "collect", axis_titles = "collect")
+
+figure_realm_NDVI
+
+ggsave(
+  filename = "figure_realm_NDVI.png",
+  plot = figure_realm_NDVI,
+  width = 11,       # in inches (adjust as needed)
+  height = 4,      # in inches
+  dpi = 600
+)
 ```
 
 ```{r realm lifestock}
 # Lifestock
-fig3b <- ggplot() +
+fig4a <- ggplot() +
   # 95% Confidence Intervals
   geom_ribbon(
     data = smoothed_LS_realm_ribbons, 
@@ -328,8 +381,9 @@ fig3b <- ggplot() +
   # Theme and labels
   theme_minimal() +
   labs(
+    title = "(a)",
     x = "Lifestock (weighted mean)",
-    y = "",
+    y = expression("Change in UD Size (km²)"),
     color = "Realm",
     fill = "Realm"
   ) +
@@ -341,17 +395,51 @@ fig3b <- ggplot() +
   # One facet per REALM
   facet_wrap(~REALM)
 
-fig3b
+fig4b <- ggplot() +
+  # 95% Confidence Intervals
+  geom_ribbon(
+    data = smoothed_LS_realm_ribbons, 
+    aes(x = wmLifestock, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
+    alpha = 0.2, color = NA
+  ) +
+  
+  # Fitted lines — use model predictions directly
+  geom_line(
+    data = smoothed_LS_realm_ribbons,
+    aes(x = wmLifestock, y = fit_smooth, color = REALM),
+    size = 1
+  ) +
+  
+  # Color scheme
+  scale_color_manual(values = okabe_ito) +
+  scale_fill_manual(values = okabe_ito) +
+  
+  # Theme and labels
+  theme_minimal() +
+  labs(
+    title = "(b)",
+    x = "Lifestock (weighted mean)",
+    y = "",
+    color = "Realm",
+    fill = "Realm"
+  ) +
+  theme(
+    legend.position = "none",
+    strip.text = element_text(size = 8)
+  ) +
+  
+  # One facet per REALM
+  facet_wrap(~REALM, scale = "free_y")
 ```
 
-```{r realm figures}
-figure_realm <- (fig3a | fig3b)+ plot_layout(guides = "collect", axis_titles = "collect")
+```{r realm lifestock figures}
+figure_realm_LS <- (fig4a | fig4b)+ plot_layout(guides = "collect", axis_titles = "collect")
 
-figure_realm
+figure_realm_LS
 
 ggsave(
-  filename = "figure_realm.png",
-  plot = figure_realm,
+  filename = "figure_realm_Lifestock.png",
+  plot = figure_realm_LS,
   width = 11,       # in inches (adjust as needed)
   height = 4,      # in inches
   dpi = 600
