@@ -29,8 +29,11 @@ model2 <- readRDS(here::here("data/0.final_data", "vulture_model.rds"))
 final_df$REALM <- as.factor(final_df$REALM)
 final_df$animal_id <- as.factor(final_df$animal_id)
 
-glimpse(final_df)
-summary(final_df)
+glimpse(final_df$dsl_wmNDVI)
+summary(final_df$dsl_wmNDVI)
+summary(final_df$dsl_UD)
+
+unique(final_df$REALM)
 ```
 
 # 1. Model assumption checking 
@@ -52,17 +55,15 @@ summary(final_df1)
 ## 3.1 create prediction grid    
 ```{r prediction grid}
 # 1. Create Prediction Grids
-# =====================
 
-# Unique species and REALMs
-species_list <- unique(final_df1$species)
-realm_list <- unique(final_df1$REALM)
+## Unique species and REALMs
+valid_pairs <- final_df1 %>% distinct(species, REALM)
 
-# Sequences for NDVI and Livestock
+## Sequences for NDVI and Livestock
 ndvi_seq <- seq(min(final_df1$dsl_wmNDVI), max(final_df1$dsl_wmNDVI), length.out = 100)
 lifestock_seq <- seq(min(final_df1$wmLifestock), max(final_df1$wmLifestock), length.out = 100)
 
-# Species–REALM-specific median coordinates
+## Species–REALM-specific median coordinates
 species_coords <- final_df1 %>%
   group_by(species, REALM) %>%
   summarize(
@@ -71,39 +72,31 @@ species_coords <- final_df1 %>%
     .groups = "drop"
   )
 
-# Choose a known animal_id (just one to avoid NA)
+## Choose a known animal_id (just one to avoid NA)
 ref_animal <- levels(final_df1$animal_id)[1]
 
-# Build NDVI grid
-pred_ndvi_grid <- expand.grid(
-  dsl_wmNDVI = ndvi_seq,
-  wmLifestock = median(final_df1$wmLifestock),
-  species = species_list,
-  REALM = realm_list
-) %>%
+# 2. Build NDVI grid
+pred_ndvi_grid <- valid_pairs %>%
   left_join(species_coords, by = c("species", "REALM")) %>%
+  tidyr::crossing(dsl_wmNDVI = ndvi_seq) %>%
   mutate(
+    wmLifestock = median(final_df1$wmLifestock),
     UDwMeanLongitude = lon_med,
-    UDwMeanLatitude = lat_med,
+    UDwMeanLatitude  = lat_med,
     animal_id = ref_animal
   ) %>%
-  filter(!is.na(UDwMeanLongitude)) %>%
   select(-lon_med, -lat_med)
 
-# Build Livestock grid
-pred_LS_grid <- expand.grid(
-  wmLifestock = lifestock_seq,
-  dsl_wmNDVI = median(final_df1$dsl_wmNDVI),
-  species = species_list,
-  REALM = realm_list
-) %>%
+# 3. Build Livestock grid
+pred_LS_grid <- valid_pairs %>%
   left_join(species_coords, by = c("species", "REALM")) %>%
+  tidyr::crossing(wmLifestock = lifestock_seq) %>%
   mutate(
+    dsl_wmNDVI = median(final_df1$dsl_wmNDVI),
     UDwMeanLongitude = lon_med,
-    UDwMeanLatitude = lat_med,
+    UDwMeanLatitude  = lat_med,
     animal_id = ref_animal
   ) %>%
-  filter(!is.na(UDwMeanLongitude)) %>%
   select(-lon_med, -lat_med)
 
 # Match factor levels
@@ -119,202 +112,114 @@ pred_LS_grid$animal_id <- factor(pred_LS_grid$animal_id, levels = levels(final_d
 ## 3.2 get predictions from the model 
 ```{r pred values}
 # Predict NDVI
-predictions_ndvi <- predict(model2, newdata = pred_ndvi_grid, se.fit = TRUE)
+predictions_ndvi <- predict(model2, newdata = pred_ndvi_grid, se.fit = TRUE, re.form = NA)
 pred_ndvi_grid$fit <- predictions_ndvi$fit
-pred_ndvi_grid$se <- predictions_ndvi$se.fit
+pred_ndvi_grid$se  <- predictions_ndvi$se.fit
 
 # Predict Livestock
-predictions_LS <- predict(model2, newdata = pred_LS_grid, se.fit = TRUE)
+predictions_LS <- predict(model2, newdata = pred_LS_grid, se.fit = TRUE, re.form = NA)
 pred_LS_grid$fit <- predictions_LS$fit
-pred_LS_grid$se <- predictions_LS$se.fit
+pred_LS_grid$se  <- predictions_LS$se.fit
 
 # Add 95% confidence intervals
 pred_ndvi_grid <- pred_ndvi_grid %>%
-  group_by(species, REALM) %>% 
   mutate(
     lower = fit - 1.96 * se,
     upper = fit + 1.96 * se
-  ) %>% 
-  ungroup()
+  )
 
 pred_LS_grid <- pred_LS_grid %>%
-  group_by(species, REALM) %>% 
   mutate(
     lower = fit - 1.96 * se,
     upper = fit + 1.96 * se
-  ) %>% 
-  ungroup()
+  )
 
-# Optional: Check results
-summary(pred_ndvi_grid$fit)
-summary(pred_LS_grid$fit)
-summary(pred_LS_grid$lower)
+# FIXED — use model output directly (NO LOESS)
+smoothed_ndvi_ribbons <- pred_ndvi_grid %>%
+  rename(
+    fit_smooth   = fit,
+    lower_smooth = lower,
+    upper_smooth = upper
+  )
+
+smoothed_LS_ribbons <- pred_LS_grid %>%
+  rename(
+    fit_smooth   = fit,
+    lower_smooth = lower,
+    upper_smooth = upper
+  )
 
 # save the model 2
-#saveRDS(pred_ndvi_grid, file = "final_predictions_dsl_NDVI.rds")
-#saveRDS(pred_LS_grid, file = "final_predictions_Lifestock.rds")
+saveRDS(pred_ndvi_grid, file = "final_predictions_dsl_NDVI.rds")
+saveRDS(pred_LS_grid, file = "final_predictions_Lifestock.rds")
 ```
 
 ## 3.3 visualization
-```{r}
-# color-paelette
-glasbey_13 <- c(
-  "#E6194B", "#3CB44B", "#FFE119", "#4363D8", "#F58231",
-  "#911EB4", "#46F0F0", "#F032E6", "#BCF60C", "#FABEBE",
-  "#008080", "#E6BEFF", "#9A6324"
+
+plot species level of relative changes in the NDVI
+```{r ndvi}
+# Okabe-Ito palette (first 5 colors)
+okabe_ito <- c(
+  "#B85C00", # dark orange (unchanged)
+  "#00714A", # dark bluish green (kept, very distinct)
+  "#7A4900", # warm dark brown (replaces gold/yellow)
+  "#781C81", # dark purple (strong contrast with others)
+  "#1B4F72"  # deep steel blue (unique, darker and not similar to sky blue)
 )
 
-# Apply loess smoothing per species
-smoothed_ndvi_ribbons <- pred_ndvi_grid %>%
-  group_by(species) %>%
-  arrange(dsl_wmNDVI) %>%
-  mutate(
-    fit_smooth   = predict(loess(fit ~ dsl_wmNDVI, span = 0.5)),
-    lower_smooth = predict(loess(lower ~ dsl_wmNDVI, span = 0.5)),
-    upper_smooth = predict(loess(upper ~ dsl_wmNDVI, span = 0.5))
-  ) %>%
-  ungroup()
-
-smoothed_LS_ribbons <- pred_LS_grid %>%
-  group_by(species) %>%
-  arrange(wmLifestock) %>%
-  mutate(
-    fit_smooth   = predict(loess(fit ~ wmLifestock, span = 0.5)),
-    lower_smooth = predict(loess(lower ~ wmLifestock, span = 0.5)),
-    upper_smooth = predict(loess(upper ~ wmLifestock, span = 0.5))
-  ) %>%
-  ungroup()
-```
-
-
-```{r ndvi}
 # NDVI
-
-# species levels
-fig1a <- ggplot() +
-  # 95% Confidence Intervals
-   geom_ribbon(data = smoothed_ndvi_ribbons, 
-              aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = species),
-              alpha = 0.2, color = NA)+
-  
-  # Fitted lines
-  geom_smooth(data = pred_ndvi_grid, 
-            aes(x = dsl_wmNDVI, y = fit, color = species), 
-            method = "loess", se = FALSE, size = 1)+
-  
-  # Color scheme
-  scale_color_manual(values = glasbey_13) +
-  scale_fill_manual(values = glasbey_13) +
-  
-  # Theme and labels
-  theme_minimal() +
-  labs(
-    x = "",
-    y = expression("Change in UD Size (km²)"),
-    color = "Species",
-    fill = "Species"
-  ) +
-  theme(
-    legend.position = "none",
-    strip.text = element_text(size = 8)
+ggplot() +
+  geom_ribbon(
+    data = smoothed_ndvi_ribbons,
+    aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
+    alpha = 0.1, color = NA
   ) +
   
-  # One facet per species
-  facet_wrap(~species)
+  geom_line(
+    data = smoothed_ndvi_ribbons,
+    aes(x = dsl_wmNDVI, y = fit_smooth, color = REALM),
+    size = 1
+  ) +
 
-fig1b <- ggplot() +
-  # 95% Confidence Intervals
-   geom_ribbon(data = smoothed_ndvi_ribbons, 
-              aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = species),
-              alpha = 0.1, color = NA)+
-  
-  # Fitted lines
-  geom_smooth(data = pred_ndvi_grid, 
-            aes(x = dsl_wmNDVI, y = fit, color = species), 
-            method = "loess", se = FALSE, size = 1)+
-  
-  # Vertical line at x = 0
   geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
-  
-  # Color scheme
-  scale_color_manual(values = glasbey_13) +
-  scale_fill_manual(values = glasbey_13) +
-  
-  # Theme and labels
+
+  scale_color_manual(values = okabe_ito) +
+  scale_fill_manual(values = okabe_ito) +
+
   theme_minimal() +
   labs(
     x = "Change in NDVI (weighted mean)",
     y = expression("Change in UD Size (km²)"),
-    color = "Species",
-    fill = "Species"
+    color = "Realm",
+    fill = "Realm"
   ) +
   theme(
     legend.position = "none",
     strip.text = element_text(size = 8)
   ) +
   
-  # One facet per species
-  facet_wrap(~species, scales = "free_y")
-
-fig1a
-fig1b
-```
-
-```{r figure combine}
-library(patchwork)
-
-figure_ndvi <- (fig1a / fig1b)+ plot_layout(guides = "collect", axis_titles = "collect")
-
-figure_ndvi
+  facet_wrap(REALM ~ species)
 ```
 
 ```{r LS}
-# LS
-fig2a <- ggplot() +
+ggplot() +
   # 95% Confidence Intervals
-   geom_ribbon(data = smoothed_LS_ribbons, 
-              aes(x = wmLifestock, ymin = lower_smooth, ymax = upper_smooth, fill = species),
-              alpha = 0.2, color = NA)+
-  
-  # Fitted lines
-  geom_smooth(data = pred_LS_grid, 
-            aes(x = wmLifestock, y = fit, color = species), 
-            method = "loess", se = FALSE, size = 1)+
-  
-  # Color scheme
-  scale_color_manual(values = glasbey_13) +
-  scale_fill_manual(values = glasbey_13) +
-  
-  # Theme and labels
-  theme_minimal() +
-  labs(
-    x = "",
-    y = expression("Change in UD Size (km²)"),
-    color = "Species",
-    fill = "Species"
-  ) +
-  theme(
-    legend.position = "none",
-    strip.text = element_text(size = 8)
+  geom_ribbon(
+    data = smoothed_LS_ribbons, 
+    aes(x = wmLifestock, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
+    alpha = 0.2, color = NA
   ) +
   
-  # One facet per species
-  facet_wrap(~species)
-
-fig2b <- ggplot() +
-  # 95% Confidence Intervals
-   geom_ribbon(data = smoothed_LS_ribbons, 
-              aes(x = wmLifestock, ymin = lower_smooth, ymax = upper_smooth, fill = species),
-              alpha = 0.2, color = NA)+
-  
-  # Fitted lines
-  geom_smooth(data = pred_LS_grid, 
-            aes(x = wmLifestock, y = fit, color = species), 
-            method = "loess", se = FALSE, size = 1)+
+  # Fitted lines — FIXED: use model predictions
+  geom_line(
+    data = smoothed_LS_ribbons,
+    aes(x = wmLifestock, y = fit_smooth, color = REALM),
+    size = 1
+  ) +
   
   # Color scheme
-  scale_color_manual(values = glasbey_13) +
-  scale_fill_manual(values = glasbey_13) +
+  scale_color_manual(values = okabe_ito) +
+  scale_fill_manual(values = okabe_ito) +
   
   # Theme and labels
   theme_minimal() +
@@ -330,16 +235,7 @@ fig2b <- ggplot() +
   ) +
   
   # One facet per species
-  facet_wrap(~species, scales = "free_y")
-
-fig2a
-fig2b
-```
-
-```{r figure combine}
-figure_lifestock <- (fig2a/ fig2b)+ plot_layout(guides = "collect", axis_titles = "collect")
-
-figure_lifestock
+  facet_wrap(REALM ~ species)
 ```
 
 ```{r figure zoom In combine}
@@ -351,57 +247,47 @@ figure_together
 # REALM grouping visualization
 ```{r REALM}
 # Apply loess smoothing per species
-smoothed_ndvi_realm_ribbons <- pred_ndvi_grid %>%
-  group_by(REALM) %>%
-  arrange(dsl_wmNDVI) %>%
-  mutate(
-    fit_smooth   = predict(loess(fit ~ dsl_wmNDVI, span = 0.5)),
-    lower_smooth = predict(loess(lower ~ dsl_wmNDVI, span = 0.5)),
-    upper_smooth = predict(loess(upper ~ dsl_wmNDVI, span = 0.5))
-  ) %>%
-  ungroup()
+smoothed_ndvi_realm_summary <- smoothed_ndvi_realm_ribbons %>%
+  group_by(REALM, dsl_wmNDVI) %>%
+  summarise(
+    fit_smooth   = mean(fit_smooth),
+    lower_smooth = mean(lower_smooth),
+    upper_smooth = mean(upper_smooth),
+    .groups = "drop"
+  )
 
 smoothed_LS_realm_ribbons <- pred_LS_grid %>%
-  group_by(REALM) %>%
-  arrange(wmLifestock) %>%
+  # Create the *_smooth columns from model predictions
   mutate(
-    fit_smooth   = predict(loess(fit ~ wmLifestock, span = 0.5)),
-    lower_smooth = predict(loess(lower ~ wmLifestock, span = 0.5)),
-    upper_smooth = predict(loess(upper ~ wmLifestock, span = 0.5))
+    fit_smooth   = fit,
+    lower_smooth = lower,
+    upper_smooth = upper
   ) %>%
-  ungroup()
-
-# Okabe-Ito palette (first 5 colors)
-okabe_ito <- c(
-  "#B85C00", # dark orange (unchanged)
-  "#00714A", # dark bluish green (kept, very distinct)
-  "#7A4900", # warm dark brown (replaces gold/yellow)
-  "#781C81", # dark purple (strong contrast with others)
-  "#1B4F72"  # deep steel blue (unique, darker and not similar to sky blue)
-)
+  group_by(REALM, wmLifestock) %>%
+  summarise(
+    fit_smooth   = mean(fit_smooth),
+    lower_smooth = mean(lower_smooth),
+    upper_smooth = mean(upper_smooth),
+    .groups = "drop"
+  )
 ```
 
 ```{r REALM ndvi}
 # NDVI
 fig3a <- ggplot() +
-  # 95% Confidence Intervals
-   geom_ribbon(data = smoothed_ndvi_realm_ribbons, 
-              aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
-              alpha = 0.1, color = NA)+
-  
-  # Fitted lines
-  geom_smooth(data = pred_ndvi_grid, 
-            aes(x = dsl_wmNDVI, y = fit, color = REALM), 
-            method = "loess", se = FALSE, size = 1)+
-  
-   # Vertical line at x = 0
+  geom_ribbon(
+    data = smoothed_ndvi_realm_summary,
+    aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
+    alpha = 0.1, color = NA
+  ) +
+  geom_line(
+    data = smoothed_ndvi_realm_summary,
+    aes(x = dsl_wmNDVI, y = fit_smooth, color = REALM),
+    size = 1
+  ) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
-  
-  # Color scheme
   scale_color_manual(values = okabe_ito) +
   scale_fill_manual(values = okabe_ito) +
-  
-  # Theme and labels
   theme_minimal() +
   labs(
     x = "Change in NDVI (weighted mean)",
@@ -413,9 +299,7 @@ fig3a <- ggplot() +
     legend.position = "none",
     strip.text = element_text(size = 8)
   ) +
-  
-  # One facet per species
-  facet_wrap(~REALM, scales = "free_y")
+  facet_wrap(~REALM)
 
 fig3a
 ```
@@ -424,19 +308,22 @@ fig3a
 # Lifestock
 fig3b <- ggplot() +
   # 95% Confidence Intervals
-   geom_ribbon(data = smoothed_LS_realm_ribbons, 
-              aes(x = wmLifestock, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
-              alpha = 0.2, color = NA)+
+  geom_ribbon(
+    data = smoothed_LS_realm_ribbons, 
+    aes(x = wmLifestock, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
+    alpha = 0.2, color = NA
+  ) +
   
-  # Fitted lines
-  geom_smooth(data = pred_LS_grid, 
-            aes(x = wmLifestock, y = fit, color = REALM), 
-            method = "loess", se = FALSE, size = 1)+
-
+  # Fitted lines — use model predictions directly
+  geom_line(
+    data = smoothed_LS_realm_ribbons,
+    aes(x = wmLifestock, y = fit_smooth, color = REALM),
+    size = 1
+  ) +
   
   # Color scheme
-  scale_color_manual(values = glasbey_13) +
-  scale_fill_manual(values = glasbey_13) +
+  scale_color_manual(values = okabe_ito) +
+  scale_fill_manual(values = okabe_ito) +
   
   # Theme and labels
   theme_minimal() +
@@ -451,8 +338,8 @@ fig3b <- ggplot() +
     strip.text = element_text(size = 8)
   ) +
   
-  # One facet per species
-  facet_wrap(~REALM, scales = "free")
+  # One facet per REALM
+  facet_wrap(~REALM)
 
 fig3b
 ```
@@ -470,10 +357,3 @@ ggsave(
   dpi = 600
 )
 ```
-
-```{r}
-library(gratia)
-appraise(model2)
-```
-
-
