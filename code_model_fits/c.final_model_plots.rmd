@@ -56,8 +56,12 @@ summary(final_df1)
 ```{r prediction grid}
 # 1. Create Prediction Grids
 
+new_world <- c("Vultur gryphus", "Cathartes aura", "Coragyps atratus")
+
 ## Unique species and REALMs
-valid_pairs <- final_df1 %>% distinct(species, REALM)
+valid_pairs <- final_df1 %>%
+  mutate(world = if_else(species %in% new_world, "New World", "Old World")) %>%
+  distinct(species, REALM, world)
 
 ## Sequences for NDVI and Livestock
 ndvi_seq <- seq(min(final_df1$dsl_wmNDVI), max(final_df1$dsl_wmNDVI), length.out = 100)
@@ -85,7 +89,7 @@ pred_ndvi_grid <- valid_pairs %>%
     UDwMeanLatitude  = lat_med,
     animal_id = ref_animal
   ) %>%
-  select(-lon_med, -lat_med)
+  dplyr::select(-lon_med, -lat_med)
 
 # 3. Build Livestock grid
 pred_LS_grid <- valid_pairs %>%
@@ -97,7 +101,7 @@ pred_LS_grid <- valid_pairs %>%
     UDwMeanLatitude  = lat_med,
     animal_id = ref_animal
   ) %>%
-  select(-lon_med, -lat_med)
+  dplyr::select(-lon_med, -lat_med)
 
 # Match factor levels
 pred_ndvi_grid$species <- factor(pred_ndvi_grid$species, levels = levels(final_df1$species))
@@ -168,7 +172,7 @@ okabe_ito <- c(
 )
 
 # NDVI
-fig1 <-ggplot() +
+fig1a <-ggplot() +
   geom_ribbon(
     data = smoothed_ndvi_ribbons,
     aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
@@ -189,7 +193,8 @@ fig1 <-ggplot() +
  # Theme and labels
   theme_minimal() +
   labs(
-    x = "Change in NDVI (weighted mean)",
+    title = "(a)",
+    x = "",
     y = expression("Change in UD Size (km²)"),
     color = "Realm",
     fill = "Realm"
@@ -202,11 +207,56 @@ fig1 <-ggplot() +
    # Facet by REALM (rows) and species (columns), but hide REALM labels
   facet_wrap(REALM ~ species, labeller = labeller(REALM = function(x) ""))
 
+fig1a
+
+fig1b <-ggplot() +
+  geom_ribbon(
+    data = smoothed_ndvi_ribbons,
+    aes(x = dsl_wmNDVI, ymin = lower_smooth, ymax = upper_smooth, fill = REALM),
+    alpha = 0.1, color = NA
+  ) +
+  
+  geom_line(
+    data = smoothed_ndvi_ribbons,
+    aes(x = dsl_wmNDVI, y = fit_smooth, color = REALM),
+    size = 1
+  ) +
+
+  geom_vline(xintercept = 0, linetype = "dashed", color = "black") +
+
+  scale_color_manual(values = okabe_ito) +
+  scale_fill_manual(values = okabe_ito) +
+
+ # Theme and labels
+  theme_minimal() +
+  labs(
+    title = "(b)",
+    x = "Change in NDVI (weighted mean)",
+    y = expression("Change in UD Size (km²)"),
+    color = "Realm",
+    fill = "Realm"
+  ) +
+  theme(
+    legend.position = "right",
+    strip.text = element_text(size = 8)
+  ) +
+  
+   # Facet by REALM (rows) and species (columns), but hide REALM labels
+  facet_wrap(REALM ~ species, labeller = labeller(REALM = function(x) ""), scale = "free")
+
+fig1b
+```
+
+```{r save}
+figure_realm_NDVI_species <- (fig1a / fig1b)+ plot_layout(guides = "collect", axis_titles = "collect")
+
+figure_realm_NDVI_species
+
 ggsave(
   filename = "figure_realm_NDVI_species_level.png",
-  plot = fig1,
+  plot = figure_realm_NDVI_species,
   width = 11,       # in inches (adjust as needed)
-  height = 5,      # in inches
+  height = 11,      # in inches
   dpi = 600
 )
 ```
@@ -247,11 +297,15 @@ fig2 <- ggplot() +
    # Facet by REALM (rows) and species (columns), but hide REALM labels
   facet_wrap(REALM ~ species, labeller = labeller(REALM = function(x) ""))
 
+fig2
+```
+
+```{r save plot2}
 ggsave(
   filename = "figure_realm_Lifestock_species_level.png",
   plot = fig2,
-  width = 11,       # in inches (adjust as needed)
-  height = 5,      # in inches
+  width = 9,       # in inches (adjust as needed)
+  height = 7,      # in inches
   dpi = 600
 )
 ```
@@ -259,7 +313,7 @@ ggsave(
 # REALM grouping visualization
 ```{r REALM}
 # Apply loess smoothing per species
-smoothed_ndvi_realm_summary <- smoothed_ndvi_realm_ribbons %>%
+smoothed_ndvi_realm_summary <- smoothed_ndvi_ribbons %>%
   group_by(REALM, dsl_wmNDVI) %>%
   summarise(
     fit_smooth   = mean(fit_smooth),
@@ -442,6 +496,60 @@ ggsave(
   plot = figure_realm_LS,
   width = 11,       # in inches (adjust as needed)
   height = 4,      # in inches
+  dpi = 600
+)
+```
+
+# New World vs Old World 
+```{r world species}
+smoothed_ndvi_ribbons_world <- smoothed_ndvi_ribbons %>%
+  group_by(species, world, dsl_wmNDVI) %>%
+  summarize(
+    fit_smooth   = mean(fit_smooth),
+    lower_smooth = mean(lower_smooth),
+    upper_smooth = mean(upper_smooth),
+    .groups = "drop"
+  )
+
+fig5 <- ggplot(smoothed_ndvi_ribbons_world) +
+  geom_ribbon(
+    aes(
+      x = dsl_wmNDVI,
+      ymin = lower_smooth,
+      ymax = upper_smooth,
+      fill = world,
+      group = species
+    ),
+    alpha = 0.1, color = NA
+  ) +
+  geom_line(
+    aes(
+      x = dsl_wmNDVI,
+      y = fit_smooth,
+      color = world,
+      group = species
+    ),
+    size = 0.5
+  ) +
+  theme_minimal() +
+  labs(
+    x = "Change in NDVI (weighted mean)",
+    y = expression("Change in UD Size (km²)"),
+    color = "Species",
+    fill = "Species"
+  )+
+  facet_wrap(world ~ species, labeller = labeller(world = function(x) ""), scale = "free") +
+  theme_minimal()
+
+fig5
+```
+
+```{r world species plot}
+ggsave(
+  filename = "figure_New_Old_species.png",
+  plot = fig5,
+  width = 9,       # in inches (adjust as needed)
+  height = 7,      # in inches
   dpi = 600
 )
 ```
