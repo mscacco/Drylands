@@ -14,7 +14,7 @@ library(doParallel)
 mycores <- detectCores()-1 
 registerDoParallel(mycores) 
 
-genPath <- "/home/ascharf/Documents/Projects/Drylands/EVC23/"
+genPath <- "/home/ascharf/Documents/Projects/Drylands/webpage/"
 dir.create(paste0(genPath,"WEB_vultureIndv_mv2"))
 pthDownldIndv <- paste0(genPath,"WEB_vultureIndv_mv2/")
 dir.create(paste0(genPath,"WEB_vultureIndv_raster_01_moll"))
@@ -40,6 +40,21 @@ all <- movebank_download_study_info(study_permission=c("data_manager","collabora
 # Remove potential studies not having deployed locations
 all <- all[all$number_of_deployed_locations > set_units(0, "count"),]
 
+# #### NEED TO ADD LINES TO CHECK WETHER THE DATA SHARED HAVE AND AGREEMENT FILLED OUT
+# 
+# shrd <- read.csv("/home/ascharf/ownCloud - ascharf@ab.mpg.de@owncloud.gwdg.de/DryLands/responses/results-survey744794_responseID_MBid.csv")
+# srhdIDs <- unlist(strsplit(shrd$mbIDS, ","))
+# 
+# all$id[!all$id%in%srhdIDs]
+# 
+# miss <- all[!all$id%in%srhdIDs, c("name","id","contact_person_name", "principal_investigator_name","taxon_ids","number_of_individuals" )]
+# data.frame(miss)
+## DEAL WITH THIS!!!
+# Cinereous Vulture Dadia NECCA  126437978   dadia-admin (Sylvia Zakkak)
+# Andean condor fledglings Bariloche 1552876338 Emily Shepard (Emily Shepard)
+# Andean Condor Vultur gryphus Bariloche, Argentina, 2013-2018 1109284853 Emily Shepard (Emily Shepard)
+
+
 vroom::problems(all) #years in weird formats
 
 names(all)
@@ -50,14 +65,14 @@ all$timestamp_first_deployed_location
 all$timestamp_last_deployed_location
 sort(all$number_of_deployed_locations)
 
-# some summary info on the available data (updated Nov 8th)
+# some summary info on the available data (updated Dec 20th)
 
 range(c(year(all$timestamp_first_deployed_location), #from 2006
         year(all$timestamp_last_deployed_location)))
-sum(all$number_of_individuals) #1892 individuals
-length(unique(all$contact_person_name)) #33 data owners
-length(unique(unlist(strsplit(all$taxon_ids, ",")))) #16 species
-sum(all$number_of_deployed_locations) #269668097 locations
+sum(all$number_of_individuals) #2934 individuals
+length(unique(all$contact_person_name)) #41 data owners
+length(unique(unlist(strsplit(all$taxon_ids, ",")))) #17 species
+sum(all$number_of_deployed_locations) #644918187 locations
 
 #________________
 # Download data, by individual.
@@ -91,11 +106,13 @@ sum(all$number_of_deployed_locations) #269668097 locations
 
 Ids_toDo <- all$id ## first round
 # Ids_toDo <- compareDF$id
+# Ids_toDo <- bit64::as.integer64(c(1659758323, 984809538 , 126437978 , 2974192054 ,180567667 , 360542075,  3238087490, 984817323))
+
 
 start_time <- Sys.time()
 
 # studyId <- Ids_toDo[1]
-# studyId <-1498452485
+# studyId <-984817323
 
 results <- lapply(Ids_toDo, function(studyId)try({
   ## create table with individuals per study, to be able to download per indivdual
@@ -104,19 +121,36 @@ results <- lapply(Ids_toDo, function(studyId)try({
   reftb <- movebank_download_deployment(study_id=studyId, omit_derived_data=F )
   # vroom::problems(reftb)
   reftb <- reftb[reftb$number_of_events > units::set_units(0,"count"),]
+  indiv <- reftb$individual_local_identifier
+  if(any(grepl("/", indiv)==T)){indiv <- gsub("/","-",indiv)}
+  reftb$individual_local_identifierNObsl <- indiv
   allindv <- unique(reftb$individual_id) ## using indv_id as sometimes indv_loc_idenitf gives error or does not exist
-  # doneIndv <- list.files(pthDownldIndv)[grep(studyId,list.files(pthDownldIndv))]
-  # allI <- paste0(studyId,"_",allindv,".rds")
-  # todoIndv <-  
+  doneIndv <- list.files(pthDownldIndv)[grep(studyId,list.files(pthDownldIndv))]
+  allStInd <- paste0(studyId,"_",reftb$individual_local_identifierNObsl,".rds")
+  missInd <- allStInd[!allStInd%in%doneIndv]
+  
+  print(paste0("done:",length(doneIndv),"-todo:",length(missInd)))
+  
+  missIndstrp <- sub("^\\d+_(.+)\\.rds$", "\\1", missInd)
+  # ^\\d+_ matches the initial number and underscore
+  # (.+) captures everything after that until the file extension
+  # \\.rds$ matches the ".rds" at the end of the string
+  # The \\1 in the replacement refers to the captured group, effectively keeping only the middle part of the string.
+  
+  todoIndv <-  reftb$individual_id[reftb$individual_local_identifierNObsl%in%missIndstrp]
+  # first round
+  # todoIndv <- allindv
+  
+  
   
   ## download each individual separatly
   # ind <- allindv[2]
-  results2 <- lapply(allindv, function(ind)try({
+  results2 <- lapply(todoIndv, function(ind)try({
     class(ind) <- "integer64" ## lapply changes the class when looping though it
-    print(ind)
+    print(paste0(studyId,"_",ind))
     #system(paste0('curl -v -u ', paste(usr, psw, sep=":"), ' -c ./cookies.txt -o ./licenseTerms/license_terms.txt "https://www.movebank.org/movebank/service/direct-read?entity_type=event&study_id=', studyId, '"'))
     mv2 <- movebank_download_study(studyId,
-                                   sensor_type_id=c("gps","argos-doppler-shift"),
+                                   sensor_type_id=c("gps","argos-doppler-shift","radio-transmitter"),
                                    # individual_local_identifier= ind,
                                    individual_id=ind,
                                    timestamp_end=as.POSIXct(Sys.time(), tz="UTC"), # to avoid locations in the future
@@ -128,8 +162,8 @@ results <- lapply(Ids_toDo, function(studyId)try({
     )
     
     if("individual_local_identifier" %in% names(mt_track_data(mv2))){
-      indiv <- mt_track_data(mv2)$individual_local_identifier
-      if(grepl("/", indiv)==T){indiv <- gsub("/","-",indiv)}
+      indiv <- unique(mt_track_data(mv2)$individual_local_identifier)
+      if(any(grepl("/", indiv)==T)){indiv <- gsub("/","-",indiv)}
       print(indiv)
     }else{
       indiv <- mt_track_data(mv2)$individual_id
@@ -139,7 +173,7 @@ results <- lapply(Ids_toDo, function(studyId)try({
   }))
 }))
 end_time <- Sys.time()
-end_time-start_time # ~ 3.5h
+end_time-start_time # ~ 4.8h
 
 is.error <- function(x) inherits(x, "try-error")
 table(vapply(results, is.error, logical(1)))
@@ -155,7 +189,7 @@ tberr <- all[as.numeric(all$id)%in%giveError,]
 ## nb sps, nb indiv, nb locs, nb studies
 
 # rr <- rast(xmin=-180, xmax=180, ymin=-90, ymax=90, crs="EPSG:4326", resolution=1, vals=NA)
-rr <- rast(paste0(genPath,"A1.rastersOfAllSpeciesRange/","Gyps_africanus.tiff"))
+rr <- rast(paste0("/home/ascharf/Documents/Projects/Drylands/EVC23/A1.rastersOfAllSpeciesRange/","Gyps_africanus.tiff"))
 values(rr) <- NA
 names(rr) <- "template"
 terra::varnames(rr) <-  "template"
@@ -164,14 +198,16 @@ IDs_done <- gsub("__(.*?).tif","",list.files(pthraster01))
 Ids_toDo <- gsub(".rds","",list.files(pthDownldIndv))
 Ids_toDo <- Ids_toDo[!Ids_toDo%in%IDs_done]
 # Indv <- Ids_toDo[1]
+# Indv <-  "103394406_C465"
 start_time <- Sys.time()
 # results <- llply(Ids_toDo, function(Indv) try({
 results <- lapply(Ids_toDo, function(Indv) try({
+  print(Indv)
   terraMv <- readRDS(paste0(pthDownldIndv,Indv,".rds"))
   terraMv <- dplyr::filter(terraMv, !sf::st_is_empty(terraMv))
   # copy individual attribute to location attribute
   if("taxon_canonical_name"%in%names(mt_track_data(terraMv))){
-  terraMv <- mt_as_event_attribute(terraMv, c("study_id","individual_id","taxon_canonical_name"))
+    terraMv <- mt_as_event_attribute(terraMv, c("study_id","individual_id","taxon_canonical_name"))
   }else{
     terraMv <- mt_as_event_attribute(terraMv, c("study_id","individual_id","taxon_ids"))
     terraMv <- rename(terraMv, taxon_canonical_name = taxon_ids )
@@ -206,7 +242,7 @@ results <- lapply(Ids_toDo, function(Indv) try({
 )
 # ,.parallel = T)
 end_time <- Sys.time()
-end_time-start_time # ~25min+20min
+end_time-start_time # ~2.5h
 
 ##################### 
 # Import, stack and sum raster layers of number of locations, individuals and studies
@@ -222,16 +258,17 @@ IDs_study <- unique(gsub("_(.*?).tif","",list.files(pthraster01)))
 sID <- IDs_study[1]
 nMBstud_sum <- sum(rast(
   lapply(IDs_study, function(sID){
-  studyIDr <- sum(rast(lapply(list.files(pthraster01, pattern=sID, full.names = T), rast)), na.rm=T)
-  studyIDr[studyIDr>1] <- 1
-  return(studyIDr)
-})
+    studyIDr <- sum(rast(lapply(list.files(pthraster01, pattern=sID, full.names = T), rast)), na.rm=T)
+    studyIDr[studyIDr>1] <- 1
+    return(studyIDr)
+  })
 ), na.rm=T)
 plot(nMBstud_sum, col=rainbow(100, start=0.1))
 writeRaster(nMBstud_sum, paste0(pthraster4plots,"nMBstud_sum.tif"), overwrite=T)
 
 IDs_taxa <- unique(gsub(".tif","",gsub(".*__","",list.files(pthraster01))))
-IDs_taxa <- IDs_taxa[!IDs_taxa%in% "Trigonoceps_occipitalis,Gyps_africanus,Necrosyrtes_monachus,Torgos_tracheliotus"]
+table(gsub(".tif","",gsub(".*__","",list.files(pthraster01))))
+IDs_taxa <- IDs_taxa[!IDs_taxa%in% c("Neophron_percnopterus,Gyps_fulvus,Aegypius_monachus,Gyps_africanus", "Trigonoceps_occipitalis,Gyps_africanus,Necrosyrtes_monachus,Torgos_tracheliotus","Caracara_plancus")]
 # tID <- IDs_taxa[16]
 nTaxa_sum <- sum(rast(
   lapply(IDs_taxa, function(tID){
@@ -242,6 +279,7 @@ nTaxa_sum <- sum(rast(
 ), na.rm=T)
 plot(nTaxa_sum, col=rainbow(100, start=0.1))
 nTaxa_sum[nTaxa_sum==10] <- NA ## 10 is at the lat/long 0,0 => we should really clean the data a bit...
+nTaxa_sum[nTaxa_sum==8] <- NA
 writeRaster(nTaxa_sum, paste0(pthraster4plots,"nTaxa_sum.tif"), overwrite=T)
 
 # # Plot and save the maps
@@ -259,7 +297,7 @@ ocean <- ne_download(scale=110, type="ocean", category="physical", destdir=pthla
 
 # ocean <- ne_load(scale=110, type="ocean", category="physical", destdir=pthlandocean,returnclass="sf")
 # land <- ne_load(scale=110, type="land", category="physical", destdir=pthlandocean,returnclass="sf")
-ggplot()+geom_sf(data=ocean, fill="paleturquoise1")+geom_sf(data=land, fill="bisque")+coord_sf(crs = crs(spsRast)) 
+ggplot()+geom_sf(data=ocean, fill="paleturquoise1")+geom_sf(data=land, fill="bisque")+coord_sf(crs = crs(nTaxa_sum)) 
 
 nLocs_sum <- rast(paste0(pthraster4plots,"nLocs_sum.tif"))
 nInds_sum <- rast(paste0(pthraster4plots,"nInds_sum.tif"))
@@ -307,6 +345,50 @@ ggplot() +
 # ggsave(paste0(pth4plots,"nTaxa_sum",".png"),width = 2800,height = 2100, units="px")
 ggsave(paste0(pth4plots,"nTaxa_sum_noledgend",".png"),width = 2800,height = 2100, units="px")
 
+
+
+
+### plot with ledgend
+#N. of species, N. of GPS locations, N. of individuals, N. of Movebank studies
+ggplot() +
+  # geom_sf(data = ne_coastline(returnclass = "sf", 50), color="grey70") +
+  geom_sf(data=ocean, fill="skyblue1", alpha=.4)+geom_sf(data=land, fill="tan")+ #paleturquoise1
+  geom_spatraster(data = nLocs_sum, aes(fill = sum), show.legend = T) +
+  coord_sf(crs = crs(nLocs_sum)) +
+  scale_fill_whitebox_c(name="N. of GPS locations",palette="viridi", direction=1)+
+  theme_bw()
+ggsave(paste0(pth4plots,"nLocs_sum",".png"),width = 2800,height = 2100, units="px")
+# ggsave(paste0(pth4plots,"nLocs_sum_noledgend",".png"),width = 2800,height = 2100, units="px")
+
+ggplot() +
+  # geom_sf(data = ne_coastline(returnclass = "sf", 50), color="grey70") +
+  geom_sf(data=ocean, fill="skyblue1", alpha=.4)+geom_sf(data=land, fill="tan")+ #paleturquoise1
+  geom_spatraster(data = nInds_sum, aes(fill = sum), show.legend = T) +
+  coord_sf(crs = crs(nInds_sum)) +
+  scale_fill_whitebox_c(name="N. of individuals",palette="viridi", direction=1)+
+  theme_bw()
+ggsave(paste0(pth4plots,"nInds_sum",".png"),width = 2800,height = 2100, units="px")
+# ggsave(paste0(pth4plots,"nInds_sum_noledgend",".png"),width = 2800,height = 2100, units="px")
+
+ggplot() +
+  # geom_sf(data = ne_coastline(returnclass = "sf", 50), color="grey70") +
+  geom_sf(data=ocean, fill="skyblue1", alpha=.4)+geom_sf(data=land, fill="tan")+ #paleturquoise1
+  geom_spatraster(data = nMBstud_sum, aes(fill = sum), show.legend = T) +
+  coord_sf(crs = crs(nMBstud_sum)) +
+  scale_fill_whitebox_c(name="N. of Movebank studies",palette="viridi", direction=1)+
+  theme_bw()
+ggsave(paste0(pth4plots,"nMBstud_sum",".png"),width = 2800,height = 2100, units="px")
+# ggsave(paste0(pth4plots,"nMBstud_sum_noledgend",".png"),width = 2800,height = 2100, units="px")
+
+ggplot() +
+  # geom_sf(data = ne_coastline(returnclass = "sf", 50), color="grey70") +
+  geom_sf(data=ocean, fill="skyblue1", alpha=.4)+geom_sf(data=land, fill="tan")+ #paleturquoise1
+  geom_spatraster(data = nTaxa_sum, aes(fill = sum), show.legend = T) +
+  coord_sf(crs = crs(nTaxa_sum)) +
+  scale_fill_whitebox_c(name="N. of species",palette="viridi", direction=1)+
+  theme_bw()
+ggsave(paste0(pth4plots,"nTaxa_sum",".png"),width = 2800,height = 2100, units="px")
+# ggsave(paste0(pth4plots,"nTaxa_sum_noledgend",".png"),width = 2800,height = 2100, units="px")
 
 
 # 

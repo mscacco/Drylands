@@ -9,6 +9,8 @@ dir.create("licenseTerms")
 
 library(move2)
 library(units)
+library(bit64)
+
 
 # # remove old keyring accounts:
 # movebank_remove_credentials() #or:
@@ -35,14 +37,14 @@ all$timestamp_first_deployed_location
 all$timestamp_last_deployed_location
 sort(all$number_of_deployed_locations)
 
-# some summary info on the available data (updated July 13th)
+# some summary info on the available data (updated Nov 7th)
 library(lubridate)
 range(c(year(all$timestamp_first_deployed_location), #from 2006
         year(all$timestamp_last_deployed_location)))
-sum(all$number_of_individuals) #1768 individuals
+sum(all$number_of_individuals) #1870 individuals
 length(unique(all$contact_person_name)) #32 data owners
 unique(unlist(strsplit(all$taxon_ids, ","))) #16 species
-sum(all$number_of_deployed_locations) #236'510'519 locations
+sum(all$number_of_deployed_locations) #266918344 locations
 
 #________________
 # Download and rasterize data per study
@@ -54,7 +56,7 @@ library(terra)
 #studyArea <- st_bbox(c(xmin = -180, xmax = 180, ymin = -90, ymax = 90), crs=st_crs("EPSG:4326"))
 #grd <- st_as_stars(studyArea, dx = 0.1, dy = 0.1, values = 0)
 rr <- rast(xmin=-180, xmax=180, ymin=-90, ymax=90, crs="EPSG:4326",
-           resolution=1, vals=NA)
+           resolution=0.01, vals=NA)
 
 # # Extract licences for data download (only needed once)
 # licencesErrors <- lapply(1:length(all$id), function(i)try({
@@ -72,9 +74,11 @@ rr <- rast(xmin=-180, xmax=180, ymin=-90, ymax=90, crs="EPSG:4326",
 
 #setwd("/home/mscacco/ownCloud/Martina/ProgettiVari/Drylands/DryLands/scripts")
 dir.create("rastersForMap")
+dir.create("/home/ascharf/Documents/Projects/Drylands/EVC23/AllVultureStudies")
+pthVultureStudies <- "/home/ascharf/Documents/Projects/Drylands/EVC23/AllVultureStudies/"
 
-IDs_done <- gsub("[A-z.]", "", list.files("rastersForMap", pattern="nLocs"))
-Ids_toDo <- as.numeric(all$id[! as.character(all$id) %in% IDs_done])
+IDs_done <- gsub("[A-z.]", "", list.files(pthVultureStudies))
+Ids_toDo <- all$id[! as.character(all$id) %in% IDs_done]
 # studies_newSpec <- c(54115008) #studies for which the species name were updated/completed
 # Ids_toDo <- c(Ids_toDo, studies_newSpec)
 
@@ -82,14 +86,25 @@ usr <- "Drylands"
 psw <- "******"
 
 results <- lapply(Ids_toDo, function(studyId) try({ 
+  class(studyId) <- "integer64"
+  print(studyId)
     #system(paste0('curl -v -u ', paste(usr, psw, sep=":"), ' -c ./cookies.txt -o ./licenseTerms/license_terms.txt "https://www.movebank.org/movebank/service/direct-read?entity_type=event&study_id=', studyId, '"'))
     terraMv <- movebank_download_study(studyId,
                                   sensor_type_id=c("gps","argos-doppler-shift"),
                                   #'license-md5'=md5sum("./licenseTerms/license_terms.txt"), #(preferred) to use together with the system call at line 71
                                   #'license-md5'=licences[3], #to use together with licence list downloaded as "errors" (see above, line 47)
-                                  'license-md5'='85ba9b4a5037a598f66e911053375585', #to use alone for one single study/licence
+                                  #'license-md5'='85ba9b4a5037a598f66e911053375585', #to use alone for one single study/licence
                                   attributes = c("study_id","individual_id",
                                                  "individual_taxon_canonical_name"))
+    saveRDS(terraMv, paste0(pthVultureStudies,studyId,".rds"))
+}))
+
+IDs_done <- gsub("[A-z.]", "", list.files("rastersForMap", pattern="nLocs"))
+Ids_toDo <- gsub(".rds","",list.files(pthVultureStudies))
+Ids_toDo <- Ids_toDo[!Ids_toDo%in%IDs_done]
+studyId <- Ids_toDo[1]
+results <- lapply(Ids_toDo, function(studyId) try({ 
+  terraMv <- readRDS(paste0(pthVultureStudies,studyId,".rds"))
     # copy individual attribute to location attribute
     terraMv <- mt_as_event_attribute(terraMv, c("study_id","individual_id","taxon_canonical_name"))
     # Check completeness of species name, for some species only genus is preset. When this happens we complete it with the name of the species with matching genus
@@ -102,10 +117,13 @@ results <- lapply(Ids_toDo, function(studyId) try({
         terraMv$taxon_canonical_name[terraMv$taxon_canonical_name==specIncomplete] <- newSpec
         terraMv$taxon_canonical_name <- as.factor(as.character(terraMv$taxon_canonical_name))
       }}
+    
     # split move object per species
     mv_ls <- split(terraMv, as.character(terraMv$taxon_canonical_name))
     # rasterize n.species (calculate one raster per species)
-    tmp1_st <- lapply(mv_ls, function(sp){
+   ## BOTTLE NECK!
+     tmp1_st <- lapply(mv_ls, function(sp){
+       sp$taxon_canonical_name <-c(rep("spsA",30),rep("spsB",30),rep("spsC",40))
       terraVect_sp <- sp
       mt_track_id(terraVect_sp) <- NULL
       terraVect_sp <- vect(terraVect_sp[!st_is_empty(terraVect_sp),])
