@@ -1,0 +1,194 @@
+#STEP 1: Copy necesary data to the cluster via Filezilla- be connected to the VPN, ssh protocol, host: raven.mpcdf.mpg.de, logon type: interactive, transferr-settings- limit nb simultaneus connections - 1
+
+#STEP 2: ssh to cluster ---------------------------------------------------------------------
+
+# if not on MPI network: 
+ssh gate.mpcdf.mpg.de
+ssh raven.mpcdf.mpg.de
+
+#if on MPI network:
+ssh anneks@raven.mpcdf.mpg.de
+
+##STEP 3: run the job ------------------------------------------------------------------------
+sbatch drylands/o8_monthlydBBvar_docker_cluster.slrm
+sbatch drylands/o9_monthlydBB_docker_cluster.slrm
+sbatch drylands/o10_monthlyUD_docker_cluster.slrm
+sbatch drylands/o11_monthlyUDtable_docker_cluster.slrm
+sbatch drylands/o12_monthlydbbcoords_docker_cluster.slrm
+sbatch drylands/o12_monthlydbbcoords_docker_cluster.slrm
+sbatch drylands/o13_NDVI_livestock_annotation.slrm
+sbatch drylands/o14_calc_ud_size_diff_perc.slrm
+
+
+
+squeue -u anneks
+
+#STEP 4: after job is done, copy files back to local machine 
+
+########################
+## get docker rocker/geospatial working on raven, that will solve many headaches of installing R packages ie units, sf,...
+
+## to get started you have to load apptainer with:
+module load apptainer/1.2.2
+
+## Then initially you need to get the image and convert it to a .sif-File:
+apptainer pull docker://rocker/geospatial
+
+
+## run R locally 
+module load apptainer/1.2.2
+apptainer exec geospatial_latest.sif R
+
+
+## install extra libraries
+# create a writeable sandbox from the container (supposing you
+already have the container as sif):
+module load apptainer/1.2.2
+apptainer build --sandbox foo/ geospatial_latest.sif
+apptainer exec --no-home --writable foo/ R
+
+
+
+## install extra libraries
+# create a writeable sandbox from the container (supposing you
+already have the container as sif):
+module load apptainer/1.2.2
+apptainer build --sandbox foo/ geospatial_latest_updated.sif
+apptainer exec --no-home --writable foo/ R
+
+
+#now install all the R packages as usual with install.packages(c("libA","libX","libY"), lib="/usr/local/lib/R/site-library")
+#and exit with Ctrl-D
+
+
+# recreate the .sif-file again
+apptainer build geospatial_latest_updated.sif foo/
+
+## run R locally  and check if installed libraries are available
+module load apptainer/1.2.2
+apptainer exec geospatial_latest_updated.sif R
+
+# VERY IMPORTANT: remove the foo/ folder as it has a huge
+# amount of files that will fill up raven's inodes unnecessarily!!!
+rm -rf foo
+
+
+
+
+## run on pc terminal
+## folder on pc will be created
+
+rsync -zrahvWt anneks@raven.mpcdf.mpg.de:/raven/u/anneks/drylands/16.vultureIndv_UDannotation/ /home/ascharf/Documents/Projects/Drylands/UDsizeChange/16.vultureIndv_UDannotation
+
+rsync -zrahvWt anneks@raven.mpcdf.mpg.de:/raven/u/anneks/drylands/17.multiple_ud_prec_area/ /home/ascharf/Documents/Projects/Drylands/UDsizeChange/17.multiple_ud_prec_area
+
+
+
+
+### 
+scp /ptmp/sebak/shared/anneks/geospatial_latest_mod.sif anneks@raven.mpcdf.mpg.de:/raven/u/anneks/
+rm geospatial_latest_updated.sif
+
+
+cp -pR /raven/u/anneks/vulturedataIn/6.vultureIndv_monthlydBBvar /raven/u/anneks/6.vultureIndv_monthlydBBvar
+rm -rf /raven/u/anneks/vulturedataIn/6.vultureIndv_monthlydBBvar
+rm -rf /raven/u/anneks/drylands/11.vultureIndv_monthlydBBvar_old
+
+scp -r anneks@raven.mpcdf.mpg.de:/raven/u/anneks/9.vultureIndv_monthlyUDL/ /home/ascharf/Documents/Projects/Drylands/EVC23/
+scp -r anneks@raven.mpcdf.mpg.de:/raven/u/anneks/8.vultureIndv_monthlydBBL /home/ascharf/Documents/Projects/Drylands/EVC23/
+
+
+## here folders will be create on local pc.
+rsync -zrahvWt anneks@raven.mpcdf.mpg.de:/raven/u/anneks/drylands/11.vultureIndv_monthlydBBvar/ /home/ascharf/Documents/Projects/Drylands/UDsizeChange/11.vultureIndv_monthlydBBvar/
+rsync -zrahvWt anneks@raven.mpcdf.mpg.de:/raven/u/anneks/drylands/12.vultureIndv_monthlydBBL/ /home/ascharf/Documents/Projects/Drylands/UDsizeChange/12.vultureIndv_monthlydBBL/
+rsync -zrahvWt anneks@raven.mpcdf.mpg.de:/raven/u/anneks/drylands/13.vultureIndv_monthlyUDL/ /home/ascharf/Documents/Projects/Drylands/UDsizeChange/13.vultureIndv_monthlyUDL/
+rsync -zrahvWt anneks@raven.mpcdf.mpg.de:/raven/u/anneks/drylands/14.vultureIndv_monthlyUDtable/ /home/ascharf/Documents/Projects/Drylands/UDsizeChange/14.vultureIndv_monthlyUDtable/
+rsync -zrahvWt anneks@raven.mpcdf.mpg.de:/raven/u/anneks/drylands/15.vultureIndv_monthlyDBBcoordinatesSF/ /home/ascharf/Documents/Projects/Drylands/UDsizeChange/15.vultureIndv_monthlyDBBcoordinatesSF/
+
+
+
+
+## run R locally 
+module load apptainer/1.2.2
+apptainer exec geospatial_latest_updated.sif R
+apptainer exec geospatial_latest_mod.sif R
+
+
+# > 1. on how to run it on the cluster?
+# After getting the image, you can get a shell inside the container with
+apptainer shell geospatial_latest.sif
+# Or you can launch R interactively with
+apptainer exec geospatial_latest.sif R
+# Or you can run a script with
+apptainer exec geospatial_latest.sig Rscript foo.R
+
+# > 2. how to get my data into it and out?
+# Your homefolder should already be mounted at /u/<your_username> and there you should also have rw access. otherwise you can also mount other locations with the the --bind flag, e.g., in case you also need ptmp that would be
+apptainer exec --bind /ptmp/<your_username> geospatial_latest.sif ...
+
+# > 3. and how to submit jobs on it?
+# You can use the same submission script as you did without apptainer. You just need to additionally load the apptainer module and instead of launching R directly you would call apptainer, i.e.,
+
+module load apptainer/1.2.2
+srun apptainer exec --bind <some_additional_mount> geospatial_latest.sif <your commands here>
+
+# For more background on containers, you can also have a look at this meet-mpcdf presentation given by my colleague Michele Compostella in May: https://datashare.mpcdf.mpg.de/s/df4p3bMuWCF53Y3.
+
+
+
+#############
+If you really need additional packages
+you should be able to create a writeable sandbox from the container as
+explained here
+https://apptainer.org/docs/user/main/build_a_container.html#creating-writable-sandbox-directories
+Then you should be able to install additional packages and afterwards
+you can recreate the .sif-file again as explained here:
+https://apptainer.org/docs/user/main/build_a_container.html#converting-containers-from-one-format-to-another
+(Also don't forget to remove the unpacked sanbox afterwards since it has a huge
+amount of files that will fill up raven's inodes unnecessarily)
+###############
+
+
+
+## present
+library("sfheaders")
+library("sf")
+library("terra")
+library("stars")
+library("raster")
+library("maptools")
+library("rgeos")
+library("plyr")
+library("bit64")
+library("units")
+
+## missing
+
+library("doMC",
+library("FD",
+library("move2",
+library("dplyr",
+library("data.table",
+library("EMbC",
+library("ggplot2",
+library("patchwork",
+library("lubridate",
+library("rnaturalearthdata",
+library("ctmm",
+library("move",
+library("suncalc",
+library("qdapRegex") ##
+library("scales",
+library("amt",
+library("mgcv",
+library("rasterVis",
+library("viridis",
+library("RColorBrewer",
+
+
+
+remove.packages(c("doMC","FD","move2","dplyr","data.table","EMbC","ggplot2","patchwork","lubridate","rnaturalearthdata","ctmm","move","suncalc","qdapRegex","scales","amt","mgcv","rasterVis","viridis","RColorBrewer", "vroom"),lib="/u/anneks/R/x86_64-pc-linux-gnu-library/4.3")
+install.packages(c("doMC","FD","move2","dplyr","data.table","EMbC","ggplot2","patchwork","lubridate","rnaturalearthdata","ctmm","move","suncalc","qdapRegex","scales","amt","mgcv","rasterVis","viridis","RColorBrewer", "vroom"), lib="/usr/local/lib/R/site-library")
+
+
+"/usr/local/lib/R/site-library/move2"

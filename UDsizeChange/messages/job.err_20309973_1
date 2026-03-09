@@ -1,0 +1,7 @@
+INFO:    fuse2fs not found, will not be able to mount EXT3 filesystems
+INFO:    gocryptfs not found, will not be able to use gocryptfs
+Linking to GEOS 3.10.2, GDAL 3.4.1, PROJ 8.2.1; sf_use_s2() is TRUE
+terra 1.8.10
+Loading required package: foreach
+Loading required package: iterators
+Loading required package: parallel
