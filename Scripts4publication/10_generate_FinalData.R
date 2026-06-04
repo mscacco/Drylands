@@ -56,3 +56,4 @@ final_df7 <- final_df6 %>% mutate(wmodeDrylands1 = ifelse(wmodeDrylands == "Non-
 final_df7$wmodeDrylands1 <-factor(final_df7$wmodeDrylands1, level = c("Non-dryland", "Drylands"))
 
 # save the data
+saveRDS(final_df7, paste0(genPath, "/Final_dryland_data_may2026.rds"))
