@@ -5,3 +5,5 @@
 # Description: Finalize the data for the model fits.
 # ---
 
+genPath <- "/path_to_folder/"
+
